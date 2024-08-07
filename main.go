@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/TylerStrel/git-secrets-replacer/internal/replacer"
@@ -16,7 +18,80 @@ var (
 	secrets           []string
 )
 
+func getBanner() string {
+	return `
+  ____ _ _   ____                     _       ____            _                
+ / ___(_) |_/ ___|  ___  ___ _ __ ___| |_ ___|  _ \ ___ _ __ | | __ _  ___ ___  _ __ 
+| |  _| | __\___ \ / _ \/ __| '__/ _ \ __/ __| |_) / _ \ '_ \| |/ _' |/ __/ _ \| '__|
+| |_| | | |_ ___) |  __/ (__| | |  __/ |_\__ \  _ <  __/ |_) | | (_| | (_|  __/| |   
+ \____|_|\__|____/ \___|\___|_|  \___|\__|___/_| \_\___| .__/|_|\__,_|\___\___||_|   
+                                                       |_|                     
+`
+}
+
+func openTerminal() error {
+	cmd := ""
+	args := []string{}
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/C", "start", "cmd"}
+	case "darwin":
+		cmd = "osascript"
+		args = []string{"-e", `tell application "Terminal" to do script ""`}
+	case "linux":
+		cmd = "x-terminal-emulator"
+		args = []string{"-e", "sh -c 'exec $SHELL'"}
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+
+	terminalCmd := exec.Command(cmd, args...)
+	return terminalCmd.Start()
+}
+
+func displayUsageInstructions() {
+	fmt.Println(`Usage Instructions:
+1. Enter the path to the repository where the code will run.
+2. Enter the path to the file containing all the secrets that need to be removed.
+3. Choose whether the changes should be force pushed to the remote/origin (true/false).
+
+For any issues, feature requests, or more information, visit:
+https://github.com/TylerStrel/git-secrets-replacer
+`)
+}
+
+func readSecretsFile(filePath string) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var secrets []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		secrets = append(secrets, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return secrets, nil
+}
+
 func main() {
+	if err := openTerminal(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening terminal: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Display banner and usage instructions
+	fmt.Println(getBanner())
+	displayUsageInstructions()
+
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Print("Enter the path to the repo that the code will run on: ")
@@ -32,16 +107,36 @@ func main() {
 	shouldForcePush = strings.TrimSpace(shouldForcePush)
 	forcePushToOrigin = strings.ToLower(shouldForcePush) == "true"
 
-	fmt.Println("Changing directory to:", repoPath)
-	if err := os.Chdir(repoPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Error changing directory: %v\n", err)
+	// Read secrets from the file
+	var err error
+	secrets, err = readSecretsFile(secretsFilePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading secrets file: %v\n", err)
 		os.Exit(1)
 	}
 
-	var err error
-	secrets, err = replacer.ReadSecrets(secretsFilePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading secrets file: %v\n", err)
+	// Display settings for validation
+	fmt.Println("\nPlease validate the settings:")
+	fmt.Println("Repository Path:", repoPath)
+	fmt.Println("Secrets File Path:", secretsFilePath)
+	fmt.Println("Force Push to Origin:", forcePushToOrigin)
+	fmt.Println("Secrets:")
+	for _, secret := range secrets {
+		fmt.Println("-", secret)
+	}
+
+	fmt.Print("\nAre these settings correct? (yes/no): ")
+	validationResponse, _ := reader.ReadString('\n')
+	validationResponse = strings.TrimSpace(validationResponse)
+
+	if strings.ToLower(validationResponse) != "yes" {
+		fmt.Println("Exiting. Please run the program again with the correct settings.")
+		os.Exit(1)
+	}
+
+	fmt.Println("Changing directory to:", repoPath)
+	if err := os.Chdir(repoPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error changing directory: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -88,4 +183,7 @@ func main() {
 	}
 
 	fmt.Println("Repository has been rewritten successfully.")
+
+	fmt.Println("\nFor any issues, feature requests, or more information, visit:")
+	fmt.Println("https://github.com/TylerStrel/git-secrets-replacer")
 }
