@@ -37,11 +37,30 @@ jobs:
           if [ "${{ matrix.goos }}" == "windows" ]; then suffix=".exe"; fi
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} garble -tiny build -o dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}${suffix}
 
+      - name: Create Linux zip file
+        if: matrix.goos == 'linux'
+        run: |
+          cp terminal.sh dist/
+          sed -i "s/\${ARCH}/${{ matrix.goarch }}/g" dist/terminal.sh
+          sed -i "s/\${VERSION_TAG}/${{ env.VERSION_TAG }}/g" dist/terminal.sh
+          chmod +x dist/terminal.sh
+          zip -j "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.zip" "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}" "dist/terminal.sh"
+
+      - name: Create macOS app bundle
+        if: matrix.goos == 'darwin'
+        run: |
+          mkdir -p "dist/GitSecretsReplacer-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.app/Contents/MacOS"
+          cp "dist/git-secrets-replacer-darwin-${{ matrix.goarch }}-${{ env.VERSION_TAG }}" "dist/GitSecretsReplacer-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.app/Contents/MacOS/git-secrets-replacer"
+          cp terminal.applescript "dist/GitSecretsReplacer-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.app/Contents/MacOS/"
+          osacompile -o "dist/GitSecretsReplacer-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.app/Contents/MacOS/git-secrets-replacer.applescript" "dist/GitSecretsReplacer-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.app/Contents/MacOS/terminal.applescript"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
         with:
           name: git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}
-          path: dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}*
+          path: |
+            dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}*
+            dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.zip
 
   release:
     runs-on: ubuntu-latest
@@ -92,10 +111,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/git-secrets-replacer-linux-amd64-${{ env.VERSION_TAG }}
-            dist/git-secrets-replacer-linux-arm64-${{ env.VERSION_TAG }}
-            dist/git-secrets-replacer-darwin-amd64-${{ env.VERSION_TAG }}
-            dist/git-secrets-replacer-darwin-arm64-${{ env.VERSION_TAG }}
+            dist/git-secrets-replacer-linux-amd64-${{ env.VERSION_TAG }}.zip
+            dist/git-secrets-replacer-linux-arm64-${{ env.VERSION_TAG }}.zip
+            dist/git-secrets-replacer-darwin-amd64-${{ env.VERSION_TAG }}.app
+            dist/git-secrets-replacer-darwin-arm64-${{ env.VERSION_TAG }}.app
             dist/git-secrets-replacer-windows-amd64-${{ env.VERSION_TAG }}.exe
             dist/git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}.exe
         env:
