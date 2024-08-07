@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/TylerStrel/git-secrets-replacer/internal/replacer"
@@ -27,28 +25,6 @@ func getBanner() string {
  \____|_|\__|____/ \___|\___|_|  \___|\__|___/_| \_\___| .__/|_|\__,_|\___\___||_|   
                                                        |_|                     
 `
-}
-
-func openTerminal() error {
-	cmd := ""
-	args := []string{}
-
-	switch runtime.GOOS {
-	case "windows":
-		cmd = "cmd"
-		args = []string{"/C", "start", "cmd"}
-	case "darwin":
-		cmd = "osascript"
-		args = []string{"-e", `tell application "Terminal" to do script ""`}
-	case "linux":
-		cmd = "x-terminal-emulator"
-		args = []string{"-e", "sh -c 'exec $SHELL'"}
-	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
-
-	terminalCmd := exec.Command(cmd, args...)
-	return terminalCmd.Start()
 }
 
 func displayUsageInstructions() {
@@ -83,11 +59,6 @@ func readSecretsFile(filePath string) ([]string, error) {
 }
 
 func main() {
-	if err := openTerminal(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening terminal: %v\n", err)
-		os.Exit(1)
-	}
-
 	fmt.Println(getBanner())
 	displayUsageInstructions()
 
