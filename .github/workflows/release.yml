@@ -1,0 +1,94 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # Triggers the workflow on version tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.20
+
+      - name: Install garble
+        run: go install mvdan.cc/garble@latest
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          suffix=""
+          if [ "${{ matrix.goos }}" == "windows" ]; then suffix=".exe"; fi
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} garble build -o dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}*
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download build artifacts for linux-amd64
+        uses: actions/download-artifact@v3
+        with:
+          name: git-secrets-replacer-linux-amd64
+          path: dist
+
+      - name: Download build artifacts for linux-arm64
+        uses: actions/download-artifact@v3
+        with:
+          name: git-secrets-replacer-linux-arm64
+          path: dist
+
+      - name: Download build artifacts for darwin-amd64
+        uses: actions/download-artifact@v3
+        with:
+          name: git-secrets-replacer-darwin-amd64
+          path: dist
+
+      - name: Download build artifacts for darwin-arm64
+        uses: actions/download-artifact@v3
+        with:
+          name: git-secrets-replacer-darwin-arm64
+          path: dist
+
+      - name: Download build artifacts for windows-amd64
+        uses: actions/download-artifact@v3
+        with:
+          name: git-secrets-replacer-windows-amd64
+          path: dist
+
+      - name: Download build artifacts for windows-arm64
+        uses: actions/download-artifact@v3
+        with:
+          name: git-secrets-replacer-windows-arm64
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/git-secrets-replacer-linux-amd64
+            dist/git-secrets-replacer-linux-arm64
+            dist/git-secrets-replacer-darwin-amd64
+            dist/git-secrets-replacer-darwin-arm64
+            dist/git-secrets-replacer-windows-amd64.exe
+            dist/git-secrets-replacer-windows-arm64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
