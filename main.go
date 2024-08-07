@@ -88,7 +88,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Display banner and usage instructions
 	fmt.Println(getBanner())
 	displayUsageInstructions()
 
@@ -107,7 +106,6 @@ func main() {
 	shouldForcePush = strings.TrimSpace(shouldForcePush)
 	forcePushToOrigin = strings.ToLower(shouldForcePush) == "true"
 
-	// Read secrets from the file
 	var err error
 	secrets, err = readSecretsFile(secretsFilePath)
 	if err != nil {
@@ -115,7 +113,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Display settings for validation
 	fmt.Println("\nPlease validate the settings:")
 	fmt.Println("Repository Path:", repoPath)
 	fmt.Println("Secrets File Path:", secretsFilePath)
@@ -129,7 +126,7 @@ func main() {
 	validationResponse, _ := reader.ReadString('\n')
 	validationResponse = strings.TrimSpace(validationResponse)
 
-	if strings.ToLower(validationResponse) != "yes" {
+	if !(strings.ToLower(validationResponse) == "yes" || strings.ToLower(validationResponse) == "y") {
 		fmt.Println("Exiting. Please run the program again with the correct settings.")
 		os.Exit(1)
 	}
@@ -154,7 +151,6 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Process commits in reverse order
 		var newHead string
 		for i := len(commits) - 1; i >= 0; i-- {
 			commit := commits[i]
