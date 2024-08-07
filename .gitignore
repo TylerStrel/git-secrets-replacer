@@ -58,3 +58,6 @@ var/
 *.egg
 
 ### Vi
+
+# MacOs
+.DS_Store
