@@ -156,7 +156,8 @@ func ProcessBlobWithGoroutines(sha, path string, secrets []string) (string, erro
 		go func() {
 			defer wg.Done()
 			for secret := range jobs {
-				regex := regexp.MustCompile(secret)
+				escapedRegex := regexp.QuoteMeta(secret)
+				regex := regexp.MustCompile(escapedRegex)
 				if regex.Match(output) {
 					mu.Lock()
 					content = regex.ReplaceAllString(content, "**REMOVED**")
