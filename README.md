@@ -1,4 +1,7 @@
 # Git Secrets Replacer
+[![Go Report Card](https://goreportcard.com/badge/github.com/TylerStrel/git-secrets-replacer)](https://goreportcard.com/report/github.com/TylerStrel/git-secrets-replacer)
+
+## Overview
 
 Git Secrets Replacer is a tool to help you remove sensitive information (secrets) from the entire history of a Git repository. It allows you to replace secrets in all commits with a sanitized version and optionally force push the changes to the remote repository.
 
