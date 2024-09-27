@@ -23,9 +23,6 @@ jobs:
         with:
           go-version: 1.22.6
 
-      - name: Install garble
-        run: go install mvdan.cc/garble@latest
-
       - name: Get version tag
         id: get_version
         run: echo "VERSION_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
@@ -35,7 +32,7 @@ jobs:
           mkdir -p dist
           suffix=""
           if [ "${{ matrix.goos }}" == "windows" ]; then suffix=".exe"; fi
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} garble -tiny build -o dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}${suffix}
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}${suffix}
 
       - name: Create Linux zip file
         if: matrix.goos == 'linux'
@@ -47,6 +44,13 @@ jobs:
           EOL
           chmod +x dist/terminal.sh
           zip -j "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.zip" "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}" "dist/terminal.sh"
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          for file in *; do
+            sha256sum "$file" > "$file.sha256"
+          done
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
@@ -99,5 +103,6 @@ jobs:
             dist/git-secrets-replacer-linux-arm64-${{ env.VERSION_TAG }}.zip
             dist/git-secrets-replacer-windows-amd64-${{ env.VERSION_TAG }}.exe
             dist/git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}.exe
+            dist/*.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}

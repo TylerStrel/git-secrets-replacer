@@ -10,6 +10,9 @@ import (
 	"sync"
 )
 
+var commitCache = sync.Map{}
+var treeCache = sync.Map{}
+
 func ProcessCommit(commit string, secrets []string) (string, error) {
 	if newCommit, found := CommitMap[commit]; found {
 		return newCommit, nil
@@ -25,7 +28,7 @@ func ProcessCommit(commit string, secrets []string) (string, error) {
 		return "", err
 	}
 
-	output, err := exec.Command("git", "cat-file", "-p", commit).Output()
+	output, err := GetCachedGitOutput("git", "cat-file", "-p", commit)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +65,11 @@ func ProcessCommit(commit string, secrets []string) (string, error) {
 }
 
 func GetTree(commit string) (string, error) {
-	output, err := exec.Command("git", "cat-file", "-p", commit).Output()
+	if tree, found := treeCache.Load(commit); found {
+		return tree.(string), nil
+	}
+
+	output, err := GetCachedGitOutput("git", "cat-file", "-p", commit)
 	if err != nil {
 		return "", err
 	}
@@ -70,14 +77,16 @@ func GetTree(commit string) (string, error) {
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "tree ") {
-			return strings.Split(line, " ")[1], nil
+			tree := strings.Split(line, " ")[1]
+			treeCache.Store(commit, tree)
+			return tree, nil
 		}
 	}
 	return "", fmt.Errorf("no tree found in commit %s", commit)
 }
 
 func ProcessTree(tree string, secrets []string) (string, error) {
-	output, err := exec.Command("git", "cat-file", "-p", tree).Output()
+	output, err := GetCachedGitOutput("git", "cat-file", "-p", tree)
 	if err != nil {
 		return "", err
 	}
@@ -86,40 +95,60 @@ func ProcessTree(tree string, secrets []string) (string, error) {
 	changed := false
 
 	lines := strings.Split(string(output), "\n")
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	results := make(chan string, len(lines))
+
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
 
-		parts := strings.Split(line, "\t")
-		modeAndSha := parts[0]
-		path := parts[1]
+		wg.Add(1)
+		go func(line string) {
+			defer wg.Done()
+			parts := strings.Split(line, "\t")
+			modeAndSha := parts[0]
+			path := parts[1]
 
-		mode := strings.Split(modeAndSha, " ")[0]
-		sha := strings.Split(modeAndSha, " ")[2]
+			mode := strings.Split(modeAndSha, " ")[0]
+			sha := strings.Split(modeAndSha, " ")[2]
 
-		var newSha string
-		if mode == "040000" {
-			newSha, err = ProcessTree(sha, secrets)
-			if err != nil {
-				return "", err
+			var newSha string
+			if mode == "040000" {
+				newSha, err = ProcessTree(sha, secrets)
+				if err != nil {
+					results <- ""
+					return
+				}
+				mu.Lock()
+				newEntries = append(newEntries, fmt.Sprintf("%s tree %s\t%s", mode, newSha, path))
+				mu.Unlock()
+			} else if mode == "100644" || mode == "100755" {
+				newSha, err = ProcessBlobWithGoroutines(sha, path, secrets)
+				if err != nil {
+					results <- ""
+					return
+				}
+				mu.Lock()
+				newEntries = append(newEntries, fmt.Sprintf("%s blob %s\t%s", mode, newSha, path))
+				mu.Unlock()
+			} else {
+				newSha = sha
+				mu.Lock()
+				newEntries = append(newEntries, fmt.Sprintf("%s %s\t%s", mode, newSha, path))
+				mu.Unlock()
 			}
-			newEntries = append(newEntries, fmt.Sprintf("%s tree %s\t%s", mode, newSha, path))
-		} else if mode == "100644" || mode == "100755" {
-			newSha, err = ProcessBlobWithGoroutines(sha, path, secrets)
-			if err != nil {
-				return "", err
-			}
-			newEntries = append(newEntries, fmt.Sprintf("%s blob %s\t%s", mode, newSha, path))
-		} else {
-			newSha = sha
-			newEntries = append(newEntries, fmt.Sprintf("%s %s\t%s", mode, newSha, path))
-		}
 
-		if newSha != sha {
-			changed = true
-		}
+			if newSha != sha {
+				changed = true
+			}
+			results <- newSha
+		}(line)
 	}
+
+	wg.Wait()
+	close(results)
 
 	if !changed {
 		return tree, nil
@@ -134,7 +163,7 @@ func ProcessTree(tree string, secrets []string) (string, error) {
 }
 
 func ProcessBlobWithGoroutines(sha, path string, secrets []string) (string, error) {
-	output, err := exec.Command("git", "cat-file", "-p", sha).Output()
+	output, err := GetCachedGitOutput("git", "cat-file", "-p", sha)
 	if err != nil {
 		return "", err
 	}
@@ -151,18 +180,24 @@ func ProcessBlobWithGoroutines(sha, path string, secrets []string) (string, erro
 	jobs := make(chan string, len(secrets))
 	results := make(chan string, len(secrets))
 
+	compiledRegexes := make([]*regexp.Regexp, len(secrets))
+	for i, secret := range secrets {
+		escapedRegex := regexp.QuoteMeta(secret)
+		compiledRegexes[i] = regexp.MustCompile(escapedRegex)
+	}
+
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for secret := range jobs {
-				escapedRegex := regexp.QuoteMeta(secret)
-				regex := regexp.MustCompile(escapedRegex)
-				if regex.Match(output) {
-					mu.Lock()
-					content = regex.ReplaceAllString(content, "**REMOVED**")
-					changed = true
-					mu.Unlock()
+				for _, regex := range compiledRegexes {
+					if regex.Match(output) {
+						mu.Lock()
+						content = regex.ReplaceAllString(content, "**REMOVED**")
+						changed = true
+						mu.Unlock()
+					}
 				}
 				results <- secret
 			}
@@ -215,4 +250,19 @@ func WriteTree(entries []string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+func GetCachedGitOutput(args ...string) ([]byte, error) {
+	key := strings.Join(args, " ")
+	if output, found := commitCache.Load(key); found {
+		return output.([]byte), nil
+	}
+
+	output, err := exec.Command(args[0], args[1:]...).Output()
+	if err != nil {
+		return nil, err
+	}
+
+	commitCache.Store(key, output)
+	return output, nil
 }
