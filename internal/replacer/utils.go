@@ -3,6 +3,7 @@ package replacer
 import (
 	"bufio"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -25,6 +26,10 @@ func ReadSecrets(filePath string) ([]string, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+
+	sort.Slice(secrets, func(i, j int) bool {
+		return len(secrets[i]) > len(secrets[j])
+	})
 
 	return secrets, nil
 }
