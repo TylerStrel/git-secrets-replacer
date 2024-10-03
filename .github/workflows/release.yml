@@ -91,6 +91,29 @@ jobs:
         with:
           name: git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}
           path: dist
+
+      - name: Install Cosign
+        run: |
+          curl -LO https://github.com/sigstore/cosign/releases/download/v2.4.0/cosign-linux-amd64
+          chmod +x cosign-linux-amd64
+          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+
+      - name: Sign artifacts with Cosign
+        run: |
+          for file in dist/*; do
+            cosign sign-blob --keyless $file
+          done
+
+      - name: Generate SLSA Provenance
+        uses: slsa-framework/slsa-github-generator/actions/generator/generic/create-base64-subjects-from-file@5a775b367a56d5bd118a224a811bba288150a563
+        with:
+          path: dist/provenance.json
+
+      - name: Upload SLSA Provenance
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
+        with:
+          name: slsa-provenance
+          path: dist/provenance.json
   
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
@@ -101,5 +124,6 @@ jobs:
             dist/git-secrets-replacer-windows-amd64-${{ env.VERSION_TAG }}.exe
             dist/git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}.exe
             dist/*.sha256
+            dist/provenance.json
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
