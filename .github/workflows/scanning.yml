@@ -1,4 +1,4 @@
-name: Security analysis workflow
+name: "Security Analysis Workflow"
 
 on:
   push:
@@ -11,53 +11,53 @@ permissions: read-all
 
 jobs:
   scorecard-analysis:
-    name: Scorecard analysis
+    name: "Scorecard Analysis"
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       id-token: write
 
     steps:
-      - name: "Checkout code"
-        uses: actions/checkout@v4.2.0
+      - name: "Checkout Code"
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938
         with:
           persist-credentials: false
 
-      - name: "Run analysis"
-        uses: ossf/scorecard-action@v2.4.0
+      - name: "Run Analysis"
+        uses: ossf/scorecard-action@62b2cac7ed8198b15735ed49ab1e5cf35480ba46
         with:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
 
-      - name: "Upload artifact"
-        uses: actions/upload-artifact@v4.4.0
+      - name: "Upload Artifact"
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
         with:
-          name: SARIF file
+          name: "SARIF file"
           path: results.sarif
           retention-days: 5
 
-      - name: "Upload to code-scanning"
-        uses: github/codeql-action/upload-sarif@v3.26.9
+      - name: "Upload to Code-Scanning"
+        uses: github/codeql-action/upload-sarif@e2b3eafc8d227b0241d48be5f425d47c2d750a13
         with:
           sarif_file: results.sarif
 
   codeql-analysis:
-    name: CodeQL analysis
+    name: "CodeQL Analysis"
     runs-on: ubuntu-latest
     permissions:
       security-events: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4.2.0
+      - name: "Checkout repository"
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+      - name: "Initialize CodeQL"
+        uses: github/codeql-action/init@e2b3eafc8d227b0241d48be5f425d47c2d750a13
         with:
           languages: 'go'
 
-      - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+      - name: "Perform CodeQL analysis"
+        uses: github/codeql-action/analyze@e2b3eafc8d227b0241d48be5f425d47c2d750a13
         with:
           category: '/github/workflow/analysis'
