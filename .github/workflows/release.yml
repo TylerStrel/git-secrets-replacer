@@ -101,7 +101,7 @@ jobs:
       - name: Sign artifacts with Cosign
         run: |
           for file in dist/*; do
-            cosign sign-blob $file
+            cosign sign-blob --yes $file
           done
 
       - name: Generate SLSA Provenance
