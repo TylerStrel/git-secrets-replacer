@@ -92,9 +92,6 @@ jobs:
           name: git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}
           path: dist
   
-      - name: List dist directory contents for debugging
-        run: ls -R dist
-  
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
