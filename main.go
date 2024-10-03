@@ -34,10 +34,8 @@ func displayUsageInstructions() {
 3. Choose whether the changes should be force pushed to the remote/origin (true/false).
 
 For any issues, feature requests, or more information, visit:
-https://github.com/TylerStrel/git-secrets-replacer
-`)
+https://github.com/TylerStrel/git-secrets-replacer`)
 }
-
 func readSecretsFile(filePath string) ([]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
