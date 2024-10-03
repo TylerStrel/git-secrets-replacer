@@ -45,53 +45,6 @@ jobs:
           chmod +x dist/terminal.sh
           zip -j "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.zip" "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}" "dist/terminal.sh"
 
-      - name: Generate checksums
-        run: |
-          cd dist
-          for file in *; do
-            sha256sum "$file" > "$file.sha256"
-          done
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
-        with:
-          name: git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}
-          path: |
-            dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}*
-            dist/git-secrets-replacer-linux-${{ matrix.goos }}-${{ env.VERSION_TAG }}.zip
-
-  release:
-    runs-on: ubuntu-latest
-    needs: [build]
-  
-    steps:
-      - name: Get version tag
-        run: echo "VERSION_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
-  
-      - name: Download build artifacts for linux-amd64
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: git-secrets-replacer-linux-amd64-${{ env.VERSION_TAG }}
-          path: dist
-  
-      - name: Download build artifacts for linux-arm64
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: git-secrets-replacer-linux-arm64-${{ env.VERSION_TAG }}
-          path: dist
-  
-      - name: Download build artifacts for windows-amd64
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: git-secrets-replacer-windows-amd64-${{ env.VERSION_TAG }}
-          path: dist
-  
-      - name: Download build artifacts for windows-arm64
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}
-          path: dist
-
       - name: Install Cosign
         run: |
           curl -LO https://github.com/sigstore/cosign/releases/download/v2.4.0/cosign-linux-amd64
@@ -109,12 +62,55 @@ jobs:
         with:
           path: dist/provenance.json
 
-      - name: Upload SLSA Provenance
+      - name: Generate checksums
+        run: |
+          cd dist
+          for file in *; do
+            sha256sum "$file" > "$file.sha256"
+          done
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
         with:
-          name: slsa-provenance
-          path: dist/provenance.json
-  
+          name: git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}
+          path: |
+            dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}*
+            dist/git-secrets-replacer-linux-${{ matrix.goos }}-${{ env.VERSION_TAG }}.zip
+            dist/*.sha256
+            dist/provenance.json
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Get version tag
+        run: echo "VERSION_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+      - name: Download build artifacts for linux-amd64
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: git-secrets-replacer-linux-amd64-${{ env.VERSION_TAG }}
+          path: dist
+
+      - name: Download build artifacts for linux-arm64
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: git-secrets-replacer-linux-arm64-${{ env.VERSION_TAG }}
+          path: dist
+
+      - name: Download build artifacts for windows-amd64
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: git-secrets-replacer-windows-amd64-${{ env.VERSION_TAG }}
+          path: dist
+
+      - name: Download build artifacts for windows-arm64
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}
+          path: dist
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
         with:
