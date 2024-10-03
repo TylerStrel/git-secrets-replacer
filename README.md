@@ -1,5 +1,6 @@
 # Git Secrets Replacer
 [![Go Report Card](https://goreportcard.com/badge/github.com/TylerStrel/git-secrets-replacer)](https://goreportcard.com/report/github.com/TylerStrel/git-secrets-replacer)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/TylerStrel/git-secrets-replacer/badge)](https://scorecard.dev/viewer/?uri=github.com/TylerStrel/git-secrets-replacer/security)
 
 ## Overview
 
@@ -100,6 +101,36 @@ In this example:
     --repoPath specifies the path to the repository.
     --secretsFilePath specifies the path to the secrets file.
     --forcePushToOrigin is a boolean flag that determines whether to force push the changes to the remote repository.
+
+## Contributions
+
+We welcome contributions! If you'd like to contribute to the project, please follow these steps:
+
+1. Fork the repository.
+2. Create a feature branch (```git checkout -b feature-branch```).
+3. Commit your changes (```git commit -am 'Add new feature'```).
+4. Push to the branch (```git push origin feature-branch```).
+5. Create a new pull request.
+6. Please ensure that your code follows the project's coding style and passes any tests before submitting.
+
+For more detailed instructions, see the CONTRIBUTING file.
+## Reporting Security Vulnerabilities
+
+If you discover a security vulnerability, please send an email to [GitSecretsReplacer@proton.me](GitSecretsReplacer@proton.me). 
+Do not file an issue for security vulnerabilities.
+
+For more details on how to report a vulnerability, see our SECURITY.md file.
+
+## Issue Tracking
+
+If you encounter any issues while using the tool, or if you have suggestions for improvement, please open an issue on our GitHub Issues page.
+
+When reporting issues, please include:
+
+1. A clear description of the issue.
+2. Steps to reproduce the issue.
+3. Any relevant logs or screenshots.
+
 
 ## License
 
