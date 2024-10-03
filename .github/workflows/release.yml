@@ -45,30 +45,6 @@ jobs:
           chmod +x dist/terminal.sh
           zip -j "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}.zip" "dist/git-secrets-replacer-linux-${{ matrix.goarch }}-${{ env.VERSION_TAG }}" "dist/terminal.sh"
 
-      - name: Install Cosign
-        run: |
-          curl -LO https://github.com/sigstore/cosign/releases/download/v2.4.0/cosign-linux-amd64
-          chmod +x cosign-linux-amd64
-          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
-
-      - name: Sign artifacts with Cosign
-        run: |
-          for file in dist/*; do
-            cosign sign-blob --yes $file
-          done
-
-      - name: Generate SLSA Provenance
-        uses: slsa-framework/slsa-github-generator/actions/generator/generic/create-base64-subjects-from-file@5a775b367a56d5bd118a224a811bba288150a563
-        with:
-          path: dist/provenance.json
-
-      - name: Generate checksums
-        run: |
-          cd dist
-          for file in *; do
-            sha256sum "$file" > "$file.sha256"
-          done
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
         with:
@@ -76,12 +52,14 @@ jobs:
           path: |
             dist/git-secrets-replacer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION_TAG }}*
             dist/git-secrets-replacer-linux-${{ matrix.goos }}-${{ env.VERSION_TAG }}.zip
-            dist/*.sha256
-            dist/provenance.json
 
   release:
     runs-on: ubuntu-latest
     needs: [build]
+
+    permissions:  # Add permissions for OIDC token and content read access
+      id-token: write
+      contents: read
 
     steps:
       - name: Get version tag
@@ -110,6 +88,31 @@ jobs:
         with:
           name: git-secrets-replacer-windows-arm64-${{ env.VERSION_TAG }}
           path: dist
+
+      - name: Install Cosign
+        run: |
+          curl -LO https://github.com/sigstore/cosign/releases/download/v2.4.0/cosign-linux-amd64
+          chmod +x cosign-linux-amd64
+          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+
+      - name: Sign artifacts with Cosign
+        run: |
+          for file in dist/*; do
+            cosign sign-blob --yes $file
+            fi
+          done
+
+      - name: Generate SLSA Provenance
+        uses: slsa-framework/slsa-github-generator/actions/generator/generic/create-base64-subjects-from-file@5a775b367a56d5bd118a224a811bba288150a563
+        with:
+          path: dist/provenance.json
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          for file in *; do
+            sha256sum "$file" > "$file.sha256"
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
