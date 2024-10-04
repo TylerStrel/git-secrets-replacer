@@ -19,5 +19,10 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
+      - name: Set up Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
       - name: Run unit tests
         run: go test ./... -v
