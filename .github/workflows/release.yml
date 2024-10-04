@@ -102,13 +102,7 @@ jobs:
         run: |
           for file in dist/*; do
             cosign sign-blob --yes $file
-            fi
           done
-
-      - name: Generate SLSA Provenance
-        uses: slsa-framework/slsa-github-generator/actions/generator/generic/create-base64-subjects-from-file@5a775b367a56d5bd118a224a811bba288150a563
-        with:
-          path: dist/provenance.json
 
       - name: Generate checksums
         run: |
