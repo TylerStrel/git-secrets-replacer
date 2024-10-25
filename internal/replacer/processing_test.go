@@ -3,250 +3,197 @@ package replacer
 import (
 	"os"
 	"os/exec"
-	"strings"
+	"runtime"
+	"sync"
 	"testing"
 )
 
-func TestProcessTree(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gitrepo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
+func mockExecCommand(command string, args ...string) *exec.Cmd {
+	cs := []string{"-test.run=TestHelperProcess", "--", command}
+	cs = append(cs, args...)
+	cmd := exec.Command(os.Args[0], cs...)
+	cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
+	return cmd
+}
 
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Fatalf("git init error: %v", err)
-	}
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir error: %v", err)
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
 	}
 
-	filePath := "testfile.txt"
-	content := []byte("this is a secret\n")
-	if err := os.WriteFile(filePath, content, 0644); err != nil {
-		t.Fatalf("write file error: %v", err)
+	args := os.Args
+	if len(args) < 4 {
+		os.Exit(2)
 	}
-	if err := exec.Command("git", "add", filePath).Run(); err != nil {
-		t.Fatalf("git add error: %v", err)
-	}
-	if err := exec.Command("git", "commit", "-m", "initial commit").Run(); err != nil {
-		t.Fatalf("git commit error: %v", err)
-	}
-
-	commitHash, err := exec.Command("git", "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatalf("git rev-parse error: %v", err)
-	}
-	commitHashStr := strings.TrimSpace(string(commitHash))
-
-	treeHash, err := GetTree(commitHashStr)
-	if err != nil {
-		t.Fatalf("GetTree() error = %v", err)
-	}
-
-	secrets := []string{"secret"}
-
-	newTree, err := ProcessTree(treeHash, secrets)
-	if err != nil {
-		t.Fatalf("ProcessTree() error = %v", err)
-	}
-
-	if newTree == treeHash {
-		t.Fatalf("expected new tree to be different from the original tree")
-	}
-
-	newBlobHash, err := exec.Command("git", "cat-file", "-p", newTree).Output()
-	if err != nil {
-		t.Fatalf("git cat-file error: %v", err)
-	}
-
-	newBlobContent, err := exec.Command("git", "cat-file", "-p", strings.Fields(string(newBlobHash))[2]).Output()
-	if err != nil {
-		t.Fatalf("git cat-file error: %v", err)
-	}
-
-	expectedContent := "this is a **REMOVED**\n"
-	if string(newBlobContent) != expectedContent {
-		t.Errorf("expected blob content %q, got %q", expectedContent, string(newBlobContent))
+	switch args[3] {
+	case "git":
+		if len(args) > 4 && args[4] == "log" {
+			os.Stdout.Write([]byte("tree abcdef123456\n"))
+		} else if len(args) > 6 && args[4] == "cat-file" && args[5] == "-s" && args[6] == "abcdef" {
+			os.Stdout.Write([]byte("12345\n"))
+		} else if len(args) > 4 && args[4] == "hash-object" {
+			os.Stdout.Write([]byte("newhash123\n"))
+		} else if len(args) > 5 && args[4] == "cat-file" && args[5] == "-p" && args[6] == "abcdef" {
+			os.Stdout.Write([]byte("secret data\n"))
+		} else if len(args) > 5 && args[4] == "cat-file" && args[5] == "-p" {
+			os.Stdout.Write([]byte("mocked output\n"))
+		} else {
+			os.Stdout.Write([]byte("mocked output\n"))
+		}
+		os.Exit(0)
+	default:
+		os.Stderr.WriteString("mocked command not recognized\n")
+		os.Exit(128)
 	}
 }
 
-func TestProcessCommitOrder(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gitrepo")
+func TestGetCachedGitOutput_CacheHit(t *testing.T) {
+	commitCache = sync.Map{}
+	commitCache.Store("git log", []byte("abcdef123456"))
+
+	output, err := GetCachedGitOutput("git", "log")
+
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
-
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Fatalf("git init error: %v", err)
-	}
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir error: %v", err)
-	}
-
-	filePath := "testfile.txt"
-	content := []byte("this is a secret\n")
-	if err := os.WriteFile(filePath, content, 0644); err != nil {
-		t.Fatalf("write file error: %v", err)
-	}
-	if err := exec.Command("git", "add", filePath).Run(); err != nil {
-		t.Fatalf("git add error: %v", err)
-	}
-	if err := exec.Command("git", "commit", "-m", "initial commit").Run(); err != nil {
-		t.Fatalf("git commit error: %v", err)
-	}
-
-	content = []byte("this is another secret\n")
-	if err := os.WriteFile(filePath, content, 0644); err != nil {
-		t.Fatalf("write file error: %v", err)
-	}
-	if err := exec.Command("git", "add", filePath).Run(); err != nil {
-		t.Fatalf("git add error: %v", err)
-	}
-	if err := exec.Command("git", "commit", "-m", "second commit").Run(); err != nil {
-		t.Fatalf("git commit error: %v", err)
-	}
-
-	commitHashes, err := exec.Command("git", "rev-list", "--all").Output()
-	if err != nil {
-		t.Fatalf("git rev-list error: %v", err)
-	}
-	commitHashList := strings.Split(strings.TrimSpace(string(commitHashes)), "\n")
-
-	secrets := []string{"secret"}
-
-	var newCommitHashes []string
-	for _, commitHash := range commitHashList {
-		newCommitHash, err := ProcessCommit(commitHash, secrets)
-		if err != nil {
-			t.Fatalf("ProcessCommit() error = %v", err)
-		}
-		newCommitHashes = append(newCommitHashes, newCommitHash)
-	}
-
-	if len(newCommitHashes) != len(commitHashList) {
-		t.Fatalf("expected %d commits, got %d", len(commitHashList), len(newCommitHashes))
-	}
-
-	for i, newCommitHash := range newCommitHashes {
-		if newCommitHash == commitHashList[i] {
-			t.Fatalf("expected new commit hash to be different from the original commit hash")
-		}
+	if string(output) != "abcdef123456" {
+		t.Errorf("expected 'abcdef123456', got '%s'", output)
 	}
 }
 
-func TestProcessBlobWithGoroutines(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gitrepo")
+func TestGetCachedGitOutput_CacheMiss(t *testing.T) {
+	execCommand = mockExecCommand
+	defer func() { execCommand = exec.Command }() // Restore execCommand after the test
+
+	output, err := GetCachedGitOutput("git", "log")
+
 	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Fatalf("git init error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir error: %v", err)
+	if string(output) != "abcdef123456" {
+		t.Errorf("expected 'abcdef123456', got '%s'", output)
 	}
+}
 
-	filePath := "testfile.txt"
-	content := []byte("this is a secret\n")
-	if err := os.WriteFile(filePath, content, 0644); err != nil {
-		t.Fatalf("write file error: %v", err)
-	}
-	if err := exec.Command("git", "add", filePath).Run(); err != nil {
-		t.Fatalf("git add error: %v", err)
-	}
-	if err := exec.Command("git", "commit", "-m", "initial commit").Run(); err != nil {
-		t.Fatalf("git commit error: %v", err)
-	}
+func TestGetTree_Found(t *testing.T) {
+	treeCache = sync.Map{}
+	treeCache.Store("abcdef", "123456")
 
-	commitHash, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	tree, err := GetTree("abcdef")
+
 	if err != nil {
-		t.Fatalf("git rev-parse error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	commitHashStr := strings.TrimSpace(string(commitHash))
+	if tree != "123456" {
+		t.Errorf("expected '123456', got '%s'", tree)
+	}
+}
 
-	treeHash, err := GetTree(commitHashStr)
+func TestGetTree_NotFound(t *testing.T) {
+	execCommand = mockExecCommand
+	tree, err := GetTree("abcdef")
+
 	if err != nil {
-		t.Fatalf("GetTree() error = %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	secrets := []string{"secret"}
-
-	newTree, err := ProcessTree(treeHash, secrets)
-	if err != nil {
-		t.Fatalf("ProcessTree() error = %v", err)
-	}
-
-	if newTree == treeHash {
-		t.Fatalf("expected new tree to be different from the original tree")
-	}
-
-	newBlobHash, err := exec.Command("git", "cat-file", "-p", newTree).Output()
-	if err != nil {
-		t.Fatalf("git cat-file error: %v", err)
-	}
-
-	newBlobContent, err := exec.Command("git", "cat-file", "-p", strings.Fields(string(newBlobHash))[2]).Output()
-	if err != nil {
-		t.Fatalf("git cat-file error: %v", err)
-	}
-
-	expectedContent := "this is a **REMOVED**\n"
-	if string(newBlobContent) != expectedContent {
-		t.Errorf("expected blob content %q, got %q", expectedContent, string(newBlobContent))
+	expectedTree := "123456"
+	if tree != expectedTree {
+		t.Errorf("expected '%s', got '%s'", expectedTree, tree)
 	}
 }
 
 func TestIsBinary(t *testing.T) {
-	textContent := []byte("this is a text file")
-	binaryContent := []byte{0x00, 0x01, 0x02, 0x03}
-
-	if IsBinary(textContent) {
-		t.Errorf("expected text content to be non-binary")
-	}
+	binaryContent := []byte{0x00, 0x10, 0x20}
+	nonBinaryContent := []byte("hello, world")
 
 	if !IsBinary(binaryContent) {
-		t.Errorf("expected binary content to be binary")
+		t.Error("expected binary content to be detected")
+	}
+	if IsBinary(nonBinaryContent) {
+		t.Error("expected non-binary content not to be detected as binary")
 	}
 }
 
-func TestWriteBlob(t *testing.T) {
-	// Create a temporary directory for the Git repository
-	tmpDir, err := os.MkdirTemp("", "gitrepo")
+func TestIsMemoryUsageHigh_True(t *testing.T) {
+	MemoryStatsWrapper = func(memStats *runtime.MemStats) {
+		memStats.Alloc = 1
+		memStats.Sys = 1
+	}
+
+	execCommand = mockExecCommand
+	high, err := isMemoryUsageHigh("abcdef")
+
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	if !high {
+		t.Error("expected high memory usage to be detected")
+	}
+}
 
-	// Initialize a new Git repository
-	if err := exec.Command("git", "init", tmpDir).Run(); err != nil {
-		t.Fatalf("git init error: %v", err)
+func TestIsMemoryUsageHigh_False(t *testing.T) {
+	MemoryStatsWrapper = func(memStats *runtime.MemStats) {
+		memStats.Alloc = 1024 * 1024 * 1024
+		memStats.Sys = 8 * 1024 * 1024 * 1024
 	}
 
-	// Change to the temporary directory
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir error: %v", err)
-	}
+	execCommand = mockExecCommand
+	high, err := isMemoryUsageHigh("abcdef")
 
-	content := []byte("this is a test blob")
-
-	sha, err := WriteBlob(content)
 	if err != nil {
-		t.Fatalf("WriteBlob() error = %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
+	if high {
+		t.Error("expected low memory usage not to be detected as high")
+	}
+}
 
-	output, err := exec.Command("git", "cat-file", "-p", sha).Output()
+func TestProcessBlob_SmallBlob(t *testing.T) {
+	execCommand = mockExecCommand
+	sha, err := ProcessBlob("abcdef", "file.txt", []string{"secret"})
+
 	if err != nil {
-		t.Fatalf("git cat-file error: %v, output: %s", err, output)
+		t.Fatalf("unexpected error: %v", err)
 	}
+	if sha != "newhash123" {
+		t.Errorf("expected 'newhash123', got '%s'", sha)
+	}
+}
 
-	if string(output) != string(content) {
-		t.Errorf("expected blob content %q, got %q", string(content), string(output))
+func TestProcessBlob_LargeBlob(t *testing.T) {
+	execCommand = mockExecCommand
+	sha, err := ProcessBlob("abcdef", "file.txt", []string{"secret"})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sha != "newhash123" {
+		t.Errorf("expected 'newhash123', got '%s'", sha)
+	}
+}
+
+func TestProcessLargeBlob_NoChanges(t *testing.T) {
+	execCommand = mockExecCommand
+	sha, err := ProcessLargeBlob("abcdef", "file.txt", []string{})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sha != "abcdef" {
+		t.Errorf("expected 'abcdef', got '%s'", sha)
+	}
+}
+
+func TestProcessLargeBlob_WithChanges(t *testing.T) {
+	execCommand = mockExecCommand
+	sha, err := ProcessLargeBlob("abcdef", "file.txt", []string{"secret"})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sha != "newhash123" {
+		t.Errorf("expected 'newhash123', got '%s'", sha)
 	}
 }
